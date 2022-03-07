@@ -1,0 +1,14 @@
+[package]
+edition = "2021"
+name = "mvt_server"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix-web = "4.0.1"
+dotenv = "0.15.0"
+geo-types = "0.7.3"
+geozero = {version = "0.8.0", features = ["with-postgis-postgres", "with-postgis-sqlx"]}
+serde = "1.0.136"
+sqlx = {version = "0.5.11", features = ["runtime-actix-native-tls", "postgres", "uuid", "time"]}
