@@ -6,7 +6,7 @@ use crate::error::ParsableRequestParam;
 use actix_web::{
     get,
     web::{self, Data},
-    App, HttpRequest, HttpServer, Responder,
+    App, HttpRequest, HttpServer, Responder, middleware,
 };
 use error::{TransectError, TransectErrorCode};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
@@ -24,6 +24,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
+            .wrap(middleware::Compress::default())
             .app_data(Data::new(pool.clone()))
             .app_data(Data::clone(&mvt_data))
             .service(index)
