@@ -4,9 +4,9 @@ use std::{collections::HashMap, sync::RwLock};
 
 use crate::error::ParsableRequestParam;
 use actix_web::{
-    get,
+    get, middleware,
     web::{self, Data},
-    App, HttpRequest, HttpServer, Responder, middleware,
+    App, HttpRequest, HttpServer, Responder,
 };
 use error::{TransectError, TransectErrorCode};
 use sqlx::{postgres::PgPoolOptions, PgPool, Row};
@@ -15,7 +15,7 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Row};
 async fn main() -> std::io::Result<()> {
     // Create a connection pool
     let pool = PgPoolOptions::new()
-        .max_connections(1)
+        .max_connections(100)
         .connect(&dotenv::var("DATABASE_URL").unwrap())
         .await
         .expect("Failed to create pool");
@@ -36,10 +36,6 @@ async fn main() -> std::io::Result<()> {
 
 #[get("/{z}/{x}/{y}.{format}")]
 async fn index(req: HttpRequest, pool: web::Data<PgPool>) -> Result<impl Responder, TransectError> {
-    let mvt_data = req
-        .app_data::<Data<RwLock<HashMap<String, Vec<u8>>>>>()
-        .unwrap();
-
     let format: String = req.match_info().get("format").parsable("format")?;
     let z: u32 = req.match_info().get("z").parsable("z")?;
     let x: u32 = req.match_info().get("x").parsable("x")?;
@@ -54,6 +50,10 @@ async fn index(req: HttpRequest, pool: web::Data<PgPool>) -> Result<impl Respond
             code: Some(TransectErrorCode::InvalidInput),
         });
     }
+
+    let mvt_data = req
+        .app_data::<Data<RwLock<HashMap<String, Vec<u8>>>>>()
+        .unwrap();
 
     let read_cached_mvt = mvt_data.read().unwrap();
 
@@ -77,7 +77,7 @@ async fn index(req: HttpRequest, pool: web::Data<PgPool>) -> Result<impl Respond
         SELECT ST_Transform(ST_TileEnvelope({z}, {x}, {y}), 3857) AS geom
     ), 
     mvtgeom AS ( 
-        SELECT ST_AsMVTGeom(ST_Transform(p.geometry, 3857),  bounds.geom) AS geom, _id
+        SELECT ST_AsMVTGeom(ST_Transform(p.geometry, 3857),  bounds.geom) AS geom, _id, p.name
         FROM projects p, bounds 
         WHERE ST_Transform(p.geometry, 3857) && bounds.geom
         AND p.deleted_at is null
@@ -89,10 +89,13 @@ async fn index(req: HttpRequest, pool: web::Data<PgPool>) -> Result<impl Respond
     let row = sqlx::query(&query)
         .fetch_one(pool.get_ref())
         .await
-        .map_err(|_| TransectError {
-            title: None,
-            detail: Some("An unexpected error occurred.".to_string()),
-            code: Some(TransectErrorCode::DBError),
+        .map_err(|err| {
+            eprintln!("{}", err);
+            TransectError {
+                title: None,
+                detail: Some("An unexpected error occurred.".to_string()),
+                code: Some(TransectErrorCode::DBError),
+            }
         })?;
 
     let mvt = row.get::<Vec<u8>, _>("st_asmvt");
